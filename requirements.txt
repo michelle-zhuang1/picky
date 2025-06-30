@@ -1,0 +1,28 @@
+# Restaurant Recommendation System Dependencies
+
+# Core data processing
+pandas>=1.5.0
+numpy>=1.21.0
+
+# Machine learning and similarity calculations
+scikit-learn>=1.1.0
+
+# Geographic calculations
+geopy>=2.3.0
+
+# Fuzzy string matching for restaurant name matching
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.20.0  # For faster fuzzy matching
+
+# HTTP requests for Google Places API
+requests>=2.28.0
+
+# Database (SQLite is built into Python)
+# No additional dependencies needed for SQLite
+
+# Optional: For better logging and configuration
+# python-dotenv>=0.19.0  # For environment variable management
+
+# Development and testing (optional)
+# pytest>=7.0.0
+# pytest-cov>=4.0.0

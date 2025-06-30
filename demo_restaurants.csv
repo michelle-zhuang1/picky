@@ -1,0 +1,11 @@
+Restaurant,City,State,Cuisine Type,Rating,Vibes,Cost,Extra Notes:,Revisit ?
+"Joe's Pizza","New York","NY","Italian",4,"casual","$$","Great thin crust pizza","Y"
+"Le Bernardin","New York","NY","French",5,"fine dining","$$$$","Amazing seafood tasting menu","Y"
+"Chipotle","Boston","MA","Mexican",3,"fast casual","$","Quick lunch option","N"
+"Mario's Restaurant","New York","NY","Italian",,"casual","$$","Haven't been yet","Y"
+"Blue Note","New York","NY","Jazz Club",,"upscale","$$$","Want to try for date night",""
+"Momofuku Noodle Bar","New York","NY","Asian",,"trendy","$$","Heard great things",""
+"Katz's Delicatessen","New York","NY","Jewish",4,"old school","$$","Famous pastrami sandwich","Y"
+"Peter Luger","Brooklyn","NY","Steakhouse",5,"old school","$$$","The ultimate steakhouse","Y"
+"Unknown Italian Place","New York","NY","Italian",,"casual","$$","Found on Yelp",""
+"New French Bistro","New York","NY","French",,"romantic","$$$","Looks promising",""

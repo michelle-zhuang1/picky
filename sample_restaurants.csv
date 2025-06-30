@@ -1,0 +1,11 @@
+Restaurant,City,State,Cuisine Type,Rating,Vibes,Cost,Extra Notes:,Revisit ?
+"Joe's Pizza","New York","NY","Italian",4,"casual","$$","Great thin crust pizza","Y"
+"Le Bernardin","New York","NY","French",5,"fine dining","$$$$","Amazing seafood tasting menu","Y"
+"Chipotle","Boston","MA","Mexican",3,"fast casual","$","Quick lunch option","N"
+"Gramercy Tavern","New York","NY","American",5,"upscale casual","$$$","Perfect for special occasions","Y"
+"Shake Shack","New York","NY","American",4,"casual","$$","Best burgers in the city","Y"
+"Katz's Delicatessen","New York","NY","Jewish",4,"old school","$$","Famous pastrami sandwich","Y"
+"Blue Hill","New York","NY","Farm-to-table",5,"fine dining","$$$$","Innovative seasonal menu","Y"
+"Russ & Daughters","New York","NY","Jewish",4,"traditional","$$","Best bagels and lox","Y"
+"Xi'an Famous Foods","New York","NY","Chinese",4,"casual","$","Incredible hand-pulled noodles","Y"
+"Peter Luger","Brooklyn","NY","Steakhouse",5,"old school","$$$","The ultimate steakhouse","Y"
