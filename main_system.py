@@ -33,7 +33,7 @@ class RestaurantRecommendationSystem:
         
         self.db_manager = DatabaseManager(db_path)
         self.google_service = GooglePlacesService(google_api_key) if google_api_key else None
-        self.recommendation_engine = RecommendationEngine(self.db_manager)
+        self.recommendation_engine = RecommendationEngine(self.db_manager, self.google_service)
         self.csv_importer = CSVImporter(self.db_manager)
         self.preference_analyzer = PreferenceAnalyzer(self.db_manager)
         
@@ -109,11 +109,11 @@ class RestaurantRecommendationSystem:
     
     def get_recommendations_for_location(self, user_id: str, lat: float, lng: float,
                                        radius_km: float = 25, limit: int = 10,
-                                       exclude_visited: bool = True) -> Dict[str, Any]:
+                                       exclude_visited: bool = True, include_live_search: bool = False) -> Dict[str, Any]:
         """Get recommendations for a specific location"""
         try:
             recommendations = self.recommendation_engine.get_recommendations(
-                user_id, lat, lng, radius_km, limit, exclude_visited
+                user_id, lat, lng, radius_km, limit, exclude_visited, include_live_search
             )
             
             # Format for output
@@ -148,11 +148,11 @@ class RestaurantRecommendationSystem:
             return {"success": False, "error": str(e)}
     
     def get_recommendations_for_city(self, user_id: str, city: str, state: str = None,
-                                   limit: int = 10) -> Dict[str, Any]:
+                                   limit: int = 10, include_live_search: bool = False) -> Dict[str, Any]:
         """Get recommendations for a specific city"""
         try:
             recommendations = self.recommendation_engine.get_recommendations_by_city(
-                user_id, city, state, limit
+                user_id, city, state, limit, include_live_search
             )
             
             # Format for output

@@ -104,7 +104,8 @@ def get_recommendations(args):
             latitude=args.latitude,
             longitude=args.longitude,
             radius_km=args.radius,
-            limit=args.limit
+            limit=args.limit,
+            include_live_search=True  # Enable live search by default
         )
     
     # City-based recommendations
@@ -117,7 +118,8 @@ def get_recommendations(args):
             user_id=args.user_id,
             city=args.city,
             state=args.state,
-            limit=args.limit
+            limit=args.limit,
+            include_live_search=True  # Enable live search by default
         )
     
     else:

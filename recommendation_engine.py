@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 class RecommendationEngine:
     """Core recommendation engine"""
     
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, google_service=None):
         self.db_manager = db_manager
         self.preference_analyzer = PreferenceAnalyzer(db_manager)
+        self.google_service = google_service
     
     def get_recommendations(self, user_id: str, lat: float, lng: float, 
                           radius_km: float = 25, limit: int = 10,
-                          exclude_visited: bool = True) -> List[Recommendation]:
+                          exclude_visited: bool = True, include_live_search: bool = False) -> List[Recommendation]:
         """Get personalized restaurant recommendations for a location"""
         
         # Get user profile
@@ -35,8 +36,14 @@ class RecommendationEngine:
             user_profile = self.preference_analyzer.analyze_user_preferences(user_id)
             self.db_manager.save_user_profile(user_profile)
         
-        # Get nearby restaurants
+        # Get nearby restaurants from database
         nearby_restaurants = self.db_manager.get_restaurants_by_location(lat, lng, radius_km)
+        
+        # Add live search results if requested
+        if include_live_search and self.google_service:
+            live_restaurants = self._get_live_restaurant_recommendations(lat, lng, radius_km, user_profile)
+            nearby_restaurants.extend(live_restaurants)
+            logger.info(f"Added {len(live_restaurants)} live restaurants from Google Places")
         
         # Filter out already visited restaurants if requested
         if exclude_visited:
@@ -45,6 +52,8 @@ class RecommendationEngine:
             nearby_restaurants = [r for r in nearby_restaurants if r.id not in visited_restaurants]
         
         if not nearby_restaurants:
+            if include_live_search and not self.google_service:
+                logger.warning("Live search requested but Google service not available")
             logger.warning(f"No restaurants found within {radius_km}km of location")
             return []
         
@@ -309,7 +318,7 @@ class RecommendationEngine:
         return intersection / union if union > 0 else 0.0
     
     def get_recommendations_by_city(self, user_id: str, city: str, state: str = None,
-                                  limit: int = 10) -> List[Recommendation]:
+                                  limit: int = 10, include_live_search: bool = False) -> List[Recommendation]:
         """Get recommendations for a specific city"""
         all_restaurants = self.db_manager.get_all_restaurants()
         
@@ -325,7 +334,15 @@ class RecommendationEngine:
             if city_match and state_match and restaurant.user_rating is None:
                 city_restaurants.append(restaurant)
         
+        # Add live search results if requested
+        if include_live_search and self.google_service:
+            live_restaurants = self._get_live_city_restaurants(city, state)
+            city_restaurants.extend(live_restaurants)
+            logger.info(f"Added {len(live_restaurants)} live restaurants from Google Places for {city}")
+        
         if not city_restaurants:
+            if include_live_search and not self.google_service:
+                logger.warning("Live search requested but Google service not available")
             logger.warning(f"No unvisited restaurants found in {city}")
             return []
         
@@ -418,4 +435,84 @@ class RecommendationEngine:
             recommendations.sort(key=lambda x: x.score, reverse=True)
         
         return recommendations
+    
+    def _get_live_restaurant_recommendations(self, lat: float, lng: float, 
+                                           radius_km: float, user_profile) -> List:
+        """Get live restaurant recommendations from Google Places"""
+        try:
+            # Convert km to meters for Google Places API
+            radius_meters = int(radius_km * 1000)
+            
+            # Search for nearby restaurants
+            places_data = self.google_service.search_nearby_restaurants(
+                lat=lat, 
+                lng=lng, 
+                radius_meters=radius_meters,
+                limit=20  # Get more results to filter and rank
+            )
+            
+            if not places_data:
+                logger.info("No live restaurants found from Google Places")
+                return []
+            
+            # Convert Google Places results to Restaurant objects
+            live_restaurants = self.google_service.convert_places_to_restaurants(places_data)
+            
+            # Filter out restaurants that already exist in our database
+            existing_place_ids = set()
+            existing_restaurants = self.db_manager.get_all_restaurants()
+            for restaurant in existing_restaurants:
+                if restaurant.google_place_id:
+                    existing_place_ids.add(restaurant.google_place_id)
+            
+            # Only return new restaurants not in our database
+            new_restaurants = [r for r in live_restaurants 
+                             if r.google_place_id not in existing_place_ids]
+            
+            logger.info(f"Found {len(new_restaurants)} new restaurants from Google Places (filtered from {len(live_restaurants)} total)")
+            return new_restaurants
+            
+        except Exception as e:
+            logger.error(f"Error getting live restaurant recommendations: {e}")
+            return []
+    
+    def _get_live_city_restaurants(self, city: str, state: str = None) -> List:
+        """Get live restaurant recommendations for a city using Google Places"""
+        try:
+            # Build search query for the city
+            location_query = city
+            if state:
+                location_query += f", {state}"
+            
+            # Search for restaurants in the city using text search
+            places_data = self.google_service.search_restaurants_by_text(
+                query="restaurants",  # Search for restaurants
+                location=location_query,
+                limit=20
+            )
+            
+            if not places_data:
+                logger.info(f"No live restaurants found for {location_query}")
+                return []
+            
+            # Convert Google Places results to Restaurant objects
+            live_restaurants = self.google_service.convert_places_to_restaurants(places_data)
+            
+            # Filter out restaurants that already exist in our database
+            existing_place_ids = set()
+            existing_restaurants = self.db_manager.get_all_restaurants()
+            for restaurant in existing_restaurants:
+                if restaurant.google_place_id:
+                    existing_place_ids.add(restaurant.google_place_id)
+            
+            # Only return new restaurants not in our database
+            new_restaurants = [r for r in live_restaurants 
+                             if r.google_place_id not in existing_place_ids]
+            
+            logger.info(f"Found {len(new_restaurants)} new restaurants for {location_query} (filtered from {len(live_restaurants)} total)")
+            return new_restaurants
+            
+        except Exception as e:
+            logger.error(f"Error getting live city restaurants: {e}")
+            return []
         

@@ -44,11 +44,11 @@ class RestaurantRecommendationAPI:
     
     def get_recommendations(self, user_id: str, latitude: float, longitude: float,
                           radius_km: float = 25, limit: int = 10,
-                          exclude_visited: bool = True) -> Dict[str, Any]:
+                          exclude_visited: bool = True, include_live_search: bool = False) -> Dict[str, Any]:
         """Get restaurant recommendations for a location"""
         try:
             result = self.system.get_recommendations_for_location(
-                user_id, latitude, longitude, radius_km, limit, exclude_visited
+                user_id, latitude, longitude, radius_km, limit, exclude_visited, include_live_search
             )
             
             if result["success"]:
@@ -62,10 +62,10 @@ class RestaurantRecommendationAPI:
             return {"success": False, "error": error_msg}
     
     def get_city_recommendations(self, user_id: str, city: str, state: str = None,
-                               limit: int = 10) -> Dict[str, Any]:
+                               limit: int = 10, include_live_search: bool = False) -> Dict[str, Any]:
         """Get restaurant recommendations for a specific city"""
         try:
-            result = self.system.get_recommendations_for_city(user_id, city, state, limit)
+            result = self.system.get_recommendations_for_city(user_id, city, state, limit, include_live_search)
             
             if result["success"]:
                 logger.info(f"Generated {result['count']} city recommendations for {city}")
@@ -167,6 +167,58 @@ class RestaurantRecommendationAPI:
             
         except Exception as e:
             error_msg = f"Error validating CSV: {str(e)}"
+            logger.error(error_msg)
+            return {"success": False, "error": error_msg}
+    
+    def search_nearby_restaurants(self, latitude: float, longitude: float, 
+                                radius_km: float = 25, cuisine_type: str = None,
+                                limit: int = 10, user_id: str = "live_search") -> Dict[str, Any]:
+        """Search for restaurants using live Google Places data"""
+        try:
+            if not self.system.google_service:
+                return {"success": False, "error": "Google Places API not configured"}
+            
+            # Convert km to meters
+            radius_meters = int(radius_km * 1000)
+            
+            # Search for nearby restaurants
+            places_data = self.system.google_service.search_nearby_restaurants(
+                lat=latitude, 
+                lng=longitude, 
+                radius_meters=radius_meters,
+                cuisine_type=cuisine_type,
+                limit=limit
+            )
+            
+            if not places_data:
+                return {"success": True, "count": 0, "restaurants": []}
+            
+            # Convert to restaurant objects
+            restaurants = self.system.google_service.convert_places_to_restaurants(places_data, user_id)
+            
+            # Format results
+            formatted_restaurants = []
+            for restaurant in restaurants:
+                formatted_restaurants.append({
+                    'id': restaurant.id,
+                    'name': restaurant.name,
+                    'cuisine_type': restaurant.cuisine_type,
+                    'location': restaurant.location,
+                    'google_rating': restaurant.google_rating,
+                    'price_level': restaurant.price_level,
+                    'vibes': restaurant.vibes,
+                    'features': restaurant.features
+                })
+            
+            return {
+                "success": True,
+                "count": len(formatted_restaurants),
+                "restaurants": formatted_restaurants,
+                "search_location": {"latitude": latitude, "longitude": longitude, "radius_km": radius_km}
+            }
+            
+        except Exception as e:
+            error_msg = f"Error searching nearby restaurants: {str(e)}"
             logger.error(error_msg)
             return {"success": False, "error": error_msg}
 

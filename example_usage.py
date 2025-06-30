@@ -36,7 +36,7 @@ def example_complete_workflow():
         print("  - Limited location enrichment available")
     
     user_id = "example_user"
-    csv_path = "restaurant_data.csv"  # Replace with your CSV file path
+    csv_path = "sample_restaurants.csv"  # Replace with your CSV file path
     
     print(f"\n1. IMPORTING RESTAURANT DATA")
     print("-" * 40)
@@ -167,7 +167,7 @@ def example_quick_functions():
     print("QUICK FUNCTION EXAMPLES")
     print("="*50)
     
-    csv_path = "restaurant_data.csv"
+    csv_path = "sample_restaurants.csv"
     user_id = "quick_user"
     
     print("\n1. Quick Import and Analysis")
@@ -278,7 +278,7 @@ def example_csv_validation():
     print("="*50)
     
     api = RestaurantRecommendationAPI()
-    csv_path = "restaurant_data.csv"
+    csv_path = "sample_restaurants.csv"
     
     # Validate CSV format
     validation = api.validate_csv_format(csv_path)

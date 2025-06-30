@@ -112,7 +112,7 @@ class GooglePlacesService:
             
             total_score = name_score + type_boost
             
-            if total_score > best_score and name_score > 60:  # Minimum name similarity threshold
+            if total_score > best_score and name_score > 40:  # Minimum name similarity threshold
                 best_score = total_score
                 best_match = result
         
@@ -272,6 +272,181 @@ class GooglePlacesService:
         logger.info(f"Batch enrichment completed. Processed {len(enriched_restaurants)} restaurants")
         return enriched_restaurants
     
+    def search_nearby_restaurants(self, lat: float, lng: float, radius_meters: int = 25000, 
+                                cuisine_type: str = None, limit: int = 20) -> List[Dict]:
+        """Search for restaurants near a location using Google Places Nearby Search"""
+        if not self.api_key:
+            logger.warning("No Google Places API key provided")
+            return []
+        
+        self._handle_rate_limiting()
+        
+        params = {
+            'location': f'{lat},{lng}',
+            'radius': min(radius_meters, 50000),  # Max 50km for Google Places
+            'type': 'restaurant',
+            'key': self.api_key
+        }
+        
+        # Add cuisine filter if specified
+        if cuisine_type:
+            params['keyword'] = cuisine_type
+        
+        try:
+            response = self.session.get(f"{self.base_url}/nearbysearch/json", params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            self.request_count += 1
+            self.last_request_time = time.time()
+            
+            results = data.get('results', [])[:limit]
+            logger.info(f"Found {len(results)} nearby restaurants")
+            return results
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Google Places Nearby Search error: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Google Places API error: {e}")
+            return []
+    
+    def search_restaurants_by_text(self, query: str, location: str = None, limit: int = 20) -> List[Dict]:
+        """Search for restaurants using Google Places Text Search"""
+        if not self.api_key:
+            logger.warning("No Google Places API key provided")
+            return []
+        
+        self._handle_rate_limiting()
+        
+        # Build search query
+        search_query = f"restaurants {query}"
+        if location:
+            search_query += f" {location}"
+        
+        params = {
+            'query': search_query,
+            'key': self.api_key,
+            'type': 'restaurant'
+        }
+        
+        try:
+            response = self.session.get(f"{self.base_url}/textsearch/json", params=params)
+            response.raise_for_status()
+            data = response.json()
+            
+            self.request_count += 1
+            self.last_request_time = time.time()
+            
+            results = data.get('results', [])[:limit]
+            logger.info(f"Found {len(results)} restaurants for query: {search_query}")
+            return results
+            
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Google Places Text Search error: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Google Places API error: {e}")
+            return []
+    
+    def convert_places_to_restaurants(self, places_data: List[Dict], user_id: str = "live_search") -> List[Restaurant]:
+        """Convert Google Places API results to Restaurant objects"""
+        restaurants = []
+        
+        for place in places_data:
+            try:
+                # Extract location info
+                geometry = place.get('geometry', {})
+                location_data = geometry.get('location', {})
+                
+                # Create restaurant object
+                restaurant = Restaurant(
+                    id=f"gp_{place.get('place_id', '')}",
+                    name=place.get('name', 'Unknown'),
+                    cuisine_type=self._extract_cuisine_types(place.get('types', [])),
+                    location={
+                        'lat': location_data.get('lat'),
+                        'lng': location_data.get('lng'),
+                        'address': place.get('formatted_address', place.get('vicinity', '')),
+                        'city': '',  # Would need geocoding to extract
+                        'state': ''  # Would need geocoding to extract
+                    },
+                    google_place_id=place.get('place_id'),
+                    google_rating=place.get('rating'),
+                    price_level=place.get('price_level'),
+                    user_rating=None,
+                    vibes=self._extract_vibes_from_types(place.get('types', [])),
+                    features={
+                        'open_now': place.get('opening_hours', {}).get('open_now', None),
+                        'photo_reference': place.get('photos', [{}])[0].get('photo_reference') if place.get('photos') else None
+                    }
+                )
+                
+                restaurants.append(restaurant)
+                
+            except Exception as e:
+                logger.warning(f"Error converting place to restaurant: {e}")
+                continue
+        
+        return restaurants
+    
+    def _extract_cuisine_types(self, google_types: List[str]) -> List[str]:
+        """Extract cuisine types from Google Places types"""
+        cuisine_mapping = {
+            'chinese_restaurant': 'Chinese',
+            'italian_restaurant': 'Italian',
+            'japanese_restaurant': 'Japanese',
+            'indian_restaurant': 'Indian',
+            'mexican_restaurant': 'Mexican',
+            'thai_restaurant': 'Thai',
+            'french_restaurant': 'French',
+            'american_restaurant': 'American',
+            'mediterranean_restaurant': 'Mediterranean',
+            'korean_restaurant': 'Korean',
+            'vietnamese_restaurant': 'Vietnamese',
+            'pizza_restaurant': 'Pizza',
+            'seafood_restaurant': 'Seafood',
+            'steakhouse': 'Steakhouse',
+            'bakery': 'Bakery',
+            'cafe': 'Cafe',
+            'bar': 'Bar',
+            'fast_food_restaurant': 'Fast Food'
+        }
+        
+        cuisines = []
+        for gtype in google_types:
+            if gtype in cuisine_mapping:
+                cuisines.append(cuisine_mapping[gtype])
+        
+        # Default to generic if no specific cuisine found
+        if not cuisines and 'restaurant' in google_types:
+            cuisines.append('Restaurant')
+        
+        return cuisines
+    
+    def _extract_vibes_from_types(self, google_types: List[str]) -> List[str]:
+        """Extract vibes from Google Places types"""
+        vibe_mapping = {
+            'bar': 'Bar',
+            'night_club': 'Nightlife',
+            'cafe': 'Casual',
+            'bakery': 'Counter-Service/To-Go',
+            'fast_food_restaurant': 'Counter-Service/To-Go',
+            'meal_takeaway': 'Counter-Service/To-Go',
+            'meal_delivery': 'Counter-Service/To-Go'
+        }
+        
+        vibes = []
+        for gtype in google_types:
+            if gtype in vibe_mapping:
+                vibes.append(vibe_mapping[gtype])
+        
+        # Default vibe
+        if not vibes:
+            vibes.append('Casual')
+        
+        return vibes
+
     def get_api_usage_stats(self) -> Dict:
         """Get API usage statistics"""
         return {
