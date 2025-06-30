@@ -252,21 +252,21 @@ def main():
         description="Picky - Personal Restaurant Recommendation System",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Examples:
-  # Import restaurant data
-  python picky.py import my_restaurants.csv --user john
+        Examples:
+        # Import restaurant data
+        python picky.py import my_restaurants.csv --user john
 
-  # Get recommendations near a location
-  python picky.py recommend --user john --lat 40.7589 --lng -73.9851
+        # Get recommendations near a location
+        python picky.py recommend --user john --lat 40.7589 --lng -73.9851
 
-  # Get recommendations for a city
-  python picky.py recommend --user john --city "San Francisco" --state CA
+        # Get recommendations for a city
+        python picky.py recommend --user john --city "San Francisco" --state CA
 
-  # Analyze your dining patterns
-  python picky.py analyze --user john
+        # Analyze your dining patterns
+        python picky.py analyze --user john
 
-  # Check system status
-  python picky.py status
+        # Check system status
+        python picky.py status
         """
     )
     

@@ -363,7 +363,7 @@ class GooglePlacesService:
                 restaurant = Restaurant(
                     id=f"gp_{place.get('place_id', '')}",
                     name=place.get('name', 'Unknown'),
-                    cuisine_type=self._extract_cuisine_types(place.get('types', [])),
+                    cuisine_type=self._extract_cuisine_types(place.get('types', []), place.get('name', '')),
                     location={
                         'lat': location_data.get('lat'),
                         'lng': location_data.get('lng'),
@@ -390,11 +390,11 @@ class GooglePlacesService:
         
         return restaurants
     
-    def _extract_cuisine_types(self, google_types: List[str]) -> List[str]:
-        """Extract cuisine types from Google Places types"""
+    def _extract_cuisine_types(self, google_types: List[str], restaurant_name: str = "") -> List[str]:
+        """Extract cuisine types from Google Places types and restaurant name"""
         cuisine_mapping = {
             'chinese_restaurant': 'Chinese',
-            'italian_restaurant': 'Italian',
+            'italian_restaurant': 'Italian', 
             'japanese_restaurant': 'Japanese',
             'indian_restaurant': 'Indian',
             'mexican_restaurant': 'Mexican',
@@ -409,20 +409,114 @@ class GooglePlacesService:
             'steakhouse': 'Steakhouse',
             'bakery': 'Bakery',
             'cafe': 'Cafe',
-            'bar': 'Bar',
-            'fast_food_restaurant': 'Fast Food'
+            'night_club': 'Bar',
+            'fast_food_restaurant': 'Fast Food',
+            'meal_takeaway': 'Takeout',
+            'meal_delivery': 'Delivery'
         }
         
         cuisines = []
+        
+        # First try to extract from Google types, but prioritize specific cuisines over generic ones
+        specific_cuisines = []
+        generic_types = []
+        
         for gtype in google_types:
             if gtype in cuisine_mapping:
-                cuisines.append(cuisine_mapping[gtype])
+                if gtype in ['cafe', 'bakery', 'night_club']:
+                    generic_types.append(cuisine_mapping[gtype])
+                else:
+                    specific_cuisines.append(cuisine_mapping[gtype])
         
-        # Default to generic if no specific cuisine found
-        if not cuisines and 'restaurant' in google_types:
-            cuisines.append('Restaurant')
+        # Prefer specific cuisines over generic ones
+        cuisines.extend(specific_cuisines)
+        if not cuisines:
+            cuisines.extend(generic_types)
         
-        return cuisines
+        # If no specific cuisine found, try to infer from restaurant name
+        if not cuisines and restaurant_name:
+            name_lower = restaurant_name.lower()
+            name_keywords = {
+                'pizza': 'Pizza',
+                'pizzeria': 'Pizza',
+                'sushi': 'Japanese', 
+                'ramen': 'Japanese',
+                'izakaya': 'Japanese',
+                'pho': 'Vietnamese',
+                'thai': 'Thai',
+                'pad thai': 'Thai',
+                'taco': 'Mexican',
+                'burrito': 'Mexican',
+                'cantina': 'Mexican',
+                'chinese': 'Chinese',
+                'dim sum': 'Chinese',
+                'indian': 'Indian',
+                'curry': 'Indian',
+                'italian': 'Italian',
+                'ristorante': 'Italian',
+                'trattoria': 'Italian', 
+                'osteria': 'Italian',
+                'pasta': 'Italian',
+                'french': 'French',
+                'bistro': 'French',
+                'brasserie': 'French',
+                'mediterranean': 'Mediterranean',
+                'greek': 'Mediterranean',
+                'korean': 'Korean',
+                'bbq': 'BBQ',
+                'barbecue': 'BBQ',
+                'steakhouse': 'Steakhouse',
+                'chophouse': 'Steakhouse',
+                'seafood': 'Seafood',
+                'oyster': 'Seafood',
+                'fish': 'Seafood',
+                'crab': 'Seafood',
+                'lobster': 'Seafood',
+                'burger': 'American',
+                'diner': 'American',
+                'grill': 'American',
+                'kitchen': 'American',
+                'bakery': 'Bakery',
+                'cafe': 'Cafe',
+                'coffee': 'Cafe',
+                'tavern': 'Bar & Grill',
+                'pub': 'Bar & Grill',
+                'lounge': 'Bar & Grill',
+                'gastropub': 'Bar & Grill'
+            }
+            
+            for keyword, cuisine in name_keywords.items():
+                if keyword in name_lower:
+                    cuisines.append(cuisine)
+                    break
+        
+        # Look for more specific restaurant types in Google types
+        if not cuisines:
+            specific_types = {
+                'lodging': 'Hotel Restaurant',
+                'spa': 'Spa Restaurant', 
+                'tourist_attraction': 'Tourist Restaurant'
+            }
+            
+            for gtype in google_types:
+                if gtype in specific_types:
+                    cuisines.append(specific_types[gtype])
+                    break
+        
+        # Default fallback based on other types
+        if not cuisines:
+            if 'cafe' in google_types:
+                cuisines.append('Cafe')
+            elif 'bakery' in google_types:
+                cuisines.append('Bakery')
+            elif 'bar' in google_types and 'restaurant' in google_types:
+                cuisines.append('Bar & Grill')  # Restaurant with bar
+            elif 'bar' in google_types:
+                cuisines.append('Bar')  # Primarily a bar
+            elif 'restaurant' in google_types or 'food' in google_types or 'establishment' in google_types:
+                cuisines.append('American')  # Better default than "Restaurant"
+        
+        return cuisines if cuisines else ['Dining']
     
     def _extract_vibes_from_types(self, google_types: List[str]) -> List[str]:
         """Extract vibes from Google Places types"""
