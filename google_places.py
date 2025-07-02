@@ -6,6 +6,7 @@ Google Places API integration for restaurant data enrichment
 import requests
 import logging
 import time
+import re
 from typing import Dict, List, Optional
 from fuzzywuzzy import fuzz
 from models import Restaurant
@@ -274,80 +275,174 @@ class GooglePlacesService:
     
     def search_nearby_restaurants(self, lat: float, lng: float, radius_meters: int = 25000, 
                                 cuisine_type: str = None, limit: int = 20) -> List[Dict]:
-        """Search for restaurants near a location using Google Places Nearby Search"""
+        """Search for restaurants near a location using Google Places Nearby Search with pagination"""
         if not self.api_key:
             logger.warning("No Google Places API key provided")
             return []
         
-        self._handle_rate_limiting()
+        all_results = []
+        next_page_token = None
+        max_pages = 3  # Google Places allows up to 3 pages (60 results total)
+        page_count = 0
         
-        params = {
-            'location': f'{lat},{lng}',
-            'radius': min(radius_meters, 50000),  # Max 50km for Google Places
-            'type': 'restaurant',
-            'key': self.api_key
-        }
+        while page_count < max_pages and len(all_results) < limit:
+            self._handle_rate_limiting()
+            
+            params = {
+                'location': f'{lat},{lng}',
+                'radius': min(radius_meters, 50000),  # Max 50km for Google Places
+                'type': 'restaurant',
+                'key': self.api_key
+            }
+            
+            # Add cuisine filter if specified
+            if cuisine_type:
+                params['keyword'] = cuisine_type
+                
+            if next_page_token:
+                params['pagetoken'] = next_page_token
+            
+            try:
+                response = self.session.get(f"{self.base_url}/nearbysearch/json", params=params)
+                response.raise_for_status()
+                data = response.json()
+                
+                self.request_count += 1
+                self.last_request_time = time.time()
+                
+                results = data.get('results', [])
+                all_results.extend(results)
+                
+                next_page_token = data.get('next_page_token')
+                page_count += 1
+                
+                logger.info(f"Page {page_count}: Found {len(results)} nearby restaurants (total: {len(all_results)})")
+                
+                # If no next page token, we've reached the end
+                if not next_page_token:
+                    break
+                
+                # Google requires a short delay before using the next page token
+                if next_page_token and page_count < max_pages and len(all_results) < limit:
+                    time.sleep(2)
+                
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Google Places Nearby Search error: {e}")
+                break
+            except Exception as e:
+                logger.error(f"Google Places API error: {e}")
+                break
         
-        # Add cuisine filter if specified
-        if cuisine_type:
-            params['keyword'] = cuisine_type
-        
-        try:
-            response = self.session.get(f"{self.base_url}/nearbysearch/json", params=params)
-            response.raise_for_status()
-            data = response.json()
-            
-            self.request_count += 1
-            self.last_request_time = time.time()
-            
-            results = data.get('results', [])[:limit]
-            logger.info(f"Found {len(results)} nearby restaurants")
-            return results
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Google Places Nearby Search error: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"Google Places API error: {e}")
-            return []
+        # Return up to the requested limit
+        final_results = all_results[:limit]
+        logger.info(f"Found {len(final_results)} nearby restaurants")
+        return final_results
     
     def search_restaurants_by_text(self, query: str, location: str = None, limit: int = 20) -> List[Dict]:
-        """Search for restaurants using Google Places Text Search"""
+        """Search for restaurants using Google Places Text Search with pagination support"""
         if not self.api_key:
             logger.warning("No Google Places API key provided")
             return []
         
-        self._handle_rate_limiting()
+        all_results = []
+        next_page_token = None
+        max_pages = 3  # Google Places allows up to 3 pages (60 results total)
+        page_count = 0
         
         # Build search query
         search_query = f"restaurants {query}"
         if location:
             search_query += f" {location}"
         
-        params = {
-            'query': search_query,
-            'key': self.api_key,
-            'type': 'restaurant'
-        }
+        while page_count < max_pages and len(all_results) < limit:
+            self._handle_rate_limiting()
+            
+            params = {
+                'query': search_query,
+                'key': self.api_key,
+                'type': 'restaurant'
+            }
+            
+            if next_page_token:
+                params['pagetoken'] = next_page_token
+            
+            try:
+                response = self.session.get(f"{self.base_url}/textsearch/json", params=params)
+                response.raise_for_status()
+                data = response.json()
+                
+                self.request_count += 1
+                self.last_request_time = time.time()
+                
+                results = data.get('results', [])
+                all_results.extend(results)
+                
+                next_page_token = data.get('next_page_token')
+                page_count += 1
+                
+                logger.info(f"Page {page_count}: Found {len(results)} restaurants (total: {len(all_results)})")
+                
+                # If no next page token, we've reached the end
+                if not next_page_token:
+                    break
+                
+                # Google requires a short delay before using the next page token
+                if next_page_token and page_count < max_pages and len(all_results) < limit:
+                    time.sleep(2)
+                
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Google Places Text Search error: {e}")
+                break
+            except Exception as e:
+                logger.error(f"Google Places API error: {e}")
+                break
         
-        try:
-            response = self.session.get(f"{self.base_url}/textsearch/json", params=params)
-            response.raise_for_status()
-            data = response.json()
+        # Return up to the requested limit
+        final_results = all_results[:limit]
+        logger.info(f"Found {len(final_results)} restaurants for query: {search_query}")
+        return final_results
+    
+    def _parse_address(self, formatted_address: str) -> Dict[str, str]:
+        """Parse formatted address to extract city and state"""
+        if not formatted_address:
+            return {'city': '', 'state': ''}
+        
+        # Common US address patterns:
+        # "1234 Main St, Seattle, WA 98101, United States"
+        # "1234 Main St, Seattle, WA, United States"
+        # "Seattle, WA 98101, United States"
+        
+        # Remove "United States" from the end if present
+        address = re.sub(r',\s*United States\s*$', '', formatted_address.strip())
+        
+        # Split by commas and get the parts
+        parts = [part.strip() for part in address.split(',')]
+        
+        city = ''
+        state = ''
+        
+        if len(parts) >= 2:
+            # Look for state pattern (2 letter code possibly followed by zip)
+            for i, part in enumerate(parts):
+                # Check if this part contains a state code
+                state_match = re.search(r'\b([A-Z]{2})\b', part)
+                if state_match and i > 0:
+                    state = state_match.group(1)
+                    # The city should be the part before the state
+                    city = parts[i-1].strip()
+                    break
             
-            self.request_count += 1
-            self.last_request_time = time.time()
-            
-            results = data.get('results', [])[:limit]
-            logger.info(f"Found {len(results)} restaurants for query: {search_query}")
-            return results
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Google Places Text Search error: {e}")
-            return []
-        except Exception as e:
-            logger.error(f"Google Places API error: {e}")
-            return []
+            # If no state pattern found, assume last part might be state and second to last is city
+            if not city and not state and len(parts) >= 2:
+                potential_state = parts[-1].strip()
+                potential_city = parts[-2].strip()
+                
+                # Check if potential_state looks like a state (2 letters or state name)
+                if re.match(r'^[A-Z]{2}$', potential_state) or len(potential_state.split()) == 1:
+                    state = potential_state
+                    city = potential_city
+        
+        return {'city': city, 'state': state}
     
     def convert_places_to_restaurants(self, places_data: List[Dict], user_id: str = "live_search") -> List[Restaurant]:
         """Convert Google Places API results to Restaurant objects"""
@@ -359,6 +454,10 @@ class GooglePlacesService:
                 geometry = place.get('geometry', {})
                 location_data = geometry.get('location', {})
                 
+                # Parse address to extract city and state
+                formatted_address = place.get('formatted_address', place.get('vicinity', ''))
+                parsed_address = self._parse_address(formatted_address)
+                
                 # Create restaurant object
                 restaurant = Restaurant(
                     id=f"gp_{place.get('place_id', '')}",
@@ -367,9 +466,9 @@ class GooglePlacesService:
                     location={
                         'lat': location_data.get('lat'),
                         'lng': location_data.get('lng'),
-                        'address': place.get('formatted_address', place.get('vicinity', '')),
-                        'city': '',  # Would need geocoding to extract
-                        'state': ''  # Would need geocoding to extract
+                        'address': formatted_address,
+                        'city': parsed_address['city'],
+                        'state': parsed_address['state']
                     },
                     google_place_id=place.get('place_id'),
                     google_rating=place.get('rating'),
@@ -519,7 +618,7 @@ class GooglePlacesService:
         return cuisines if cuisines else ['Dining']
     
     def _extract_vibes_from_types(self, google_types: List[str]) -> List[str]:
-        """Extract vibes from Google Places types"""
+        """Extract vibes from Google Places types with enhanced mapping"""
         vibe_mapping = {
             'bar': 'Bar',
             'night_club': 'Nightlife',
@@ -527,19 +626,40 @@ class GooglePlacesService:
             'bakery': 'Counter-Service/To-Go',
             'fast_food_restaurant': 'Counter-Service/To-Go',
             'meal_takeaway': 'Counter-Service/To-Go',
-            'meal_delivery': 'Counter-Service/To-Go'
+            'meal_delivery': 'Counter-Service/To-Go',
+            'lodging': 'Hotel',
+            'spa': 'Upscale',
+            'tourist_attraction': 'Tourist',
+            'establishment': 'Casual'  # Most establishments are casual
         }
         
-        vibes = []
+        # Enhanced vibe inference based on combinations of types
+        vibes = set()
+        has_restaurant = 'restaurant' in google_types
+        has_food = 'food' in google_types
+        has_establishment = 'establishment' in google_types
+        
+        # Extract direct vibe mappings
         for gtype in google_types:
             if gtype in vibe_mapping:
-                vibes.append(vibe_mapping[gtype])
+                vibes.add(vibe_mapping[gtype])
         
-        # Default vibe
-        if not vibes:
-            vibes.append('Casual')
+        # Infer additional vibes based on type combinations
+        if has_restaurant or has_food or has_establishment:
+            # If it's a restaurant/food place without specific vibes, it's likely casual
+            if not vibes or 'Casual' in vibes:
+                vibes.add('Casual')
+            
+            # Add "Casual" to restaurants that might also be bars (they can be both)
+            if 'Bar' in vibes:
+                vibes.add('Casual')  # Bar restaurants are often casual too
         
-        return vibes
+        # Convert back to list and ensure we always have at least one vibe
+        vibes_list = list(vibes)
+        if not vibes_list:
+            vibes_list = ['Casual']
+        
+        return vibes_list
 
     def get_api_usage_stats(self) -> Dict:
         """Get API usage statistics"""

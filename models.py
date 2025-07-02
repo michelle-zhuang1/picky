@@ -25,6 +25,7 @@ class Restaurant:
     revisit_preference: Optional[str] = None
     notes: Optional[str] = None
     neighborhood: Optional[str] = None
+    is_wishlist: bool = False  # True if this is a restaurant the user wants to try
     last_updated: datetime = field(default_factory=datetime.now)
 
 @dataclass
@@ -46,3 +47,18 @@ class Recommendation:
     score: float
     reasoning: str
     distance_km: Optional[float] = None
+
+@dataclass
+class RecommendationSession:
+    """Interactive recommendation session model"""
+    session_id: str
+    user_id: str
+    location: Dict[str, Any]  # city, state, lat, lng
+    shown_restaurant_ids: List[str] = field(default_factory=list)
+    liked_restaurant_ids: List[str] = field(default_factory=list)
+    disliked_restaurant_ids: List[str] = field(default_factory=list)
+    session_preferences: Dict[str, Any] = field(default_factory=dict)  # temporary preferences for this session
+    filters: Dict[str, List[str]] = field(default_factory=dict)  # cuisine_filter, vibe_filter
+    cached_live_restaurants: List[str] = field(default_factory=list)  # IDs of live restaurants fetched for this session
+    created_at: datetime = field(default_factory=datetime.now)
+    last_activity: datetime = field(default_factory=datetime.now)

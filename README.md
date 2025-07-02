@@ -10,6 +10,8 @@
 - **🧠 Smart Learning**: The more data you provide, the better the recommendations become
 - **🌟 Google Places Integration**: Enhanced with Google ratings, reviews, and location data
 - **📈 Dining Analytics**: Understand your food preferences, price comfort zones, and dining personality
+- **➕ Restaurant Management**: Add individual restaurants from Apple Maps guides or other sources
+- **🔄 Interactive Sessions**: Get recommendations with real-time feedback and preference refinement
 
 ## 🚀 Quick Start
 
@@ -39,6 +41,15 @@ python picky.py recommend --user your_name --lat 40.7589 --lng -73.9851
 
 # Get recommendations for a city
 python picky.py recommend --user your_name --city "San Francisco" --state CA
+
+# Interactive recommendations with feedback
+python picky.py interactive --user your_name --city "Seattle" --state WA
+
+# Add individual restaurants (from Apple Maps guides, etc.)
+python picky.py add --name "Restaurant Name" --city "City" --user your_name --wishlist
+
+# Add multiple restaurants interactively
+python picky.py add --interactive --user your_name
 
 # Analyze your dining patterns
 python picky.py analyze --user your_name
@@ -108,10 +119,16 @@ python picky.py recommend --user my_name --city "Portland" --state OR --limit 5
 # 3. Get recommendations near a specific location
 python picky.py recommend --user my_name --lat 45.5152 --lng -122.6784 --radius 15
 
-# 4. Analyze your dining preferences
+# 4. Add restaurants from Apple Maps guides or other sources
+python picky.py add --name "Canlis" --city "Seattle" --state "WA" --user my_name --wishlist --auto-confirm
+
+# 5. Interactive recommendations with real-time feedback
+python picky.py interactive --user my_name --city "Portland" --state OR
+
+# 6. Analyze your dining preferences
 python picky.py analyze --user my_name
 
-# 5. Check system status anytime
+# 7. Check system status anytime
 python picky.py status
 ```
 
@@ -191,6 +208,51 @@ similar = api.find_similar_restaurants(
 wishlist = api.get_wishlist_recommendations("your_name")
 ```
 
+### Add Individual Restaurants
+
+```python
+# Add restaurants from Apple Maps guides or other sources
+result = api.add_restaurant_by_name(
+    name="Canlis",
+    city="Seattle", 
+    state="WA",
+    user_id="your_name",
+    notes="Fine dining for special occasions",
+    is_wishlist=True
+)
+
+# Confirm the addition
+if result["success"] and not result.get("duplicate"):
+    confirm_result = api.confirm_restaurant_addition(result["temp_id"])
+    print(f"Added: {confirm_result['message']}")
+```
+
+### Interactive Recommendation Sessions
+
+```python
+# Start an interactive session
+session = api.start_interactive_session(
+    user_id="your_name",
+    city="Seattle",
+    state="WA"
+)
+
+# Get recommendations
+recommendations = api.get_session_recommendations(session["session_id"])
+
+# Provide feedback  
+feedback = api.provide_session_feedback(
+    session_id=session["session_id"],
+    liked_restaurant_ids=["rest_1", "rest_3"],
+    disliked_restaurant_ids=["rest_2"],
+    cuisine_preferences=["Italian", "Japanese"],
+    vibe_preferences=["romantic", "upscale"]
+)
+
+# Get refined recommendations
+refined_recs = api.get_session_recommendations(session["session_id"])
+```
+
 ## 🛠️ Advanced Usage
 
 ### Running the Complete Example
@@ -242,6 +304,9 @@ for user in users:
 5. **Include Price Information**: Helps match recommendations to your budget
 6. **Geographic Diversity**: Include restaurants from different cities for better location matching
 7. **Enable Google Places API**: This dramatically expands the restaurant database beyond just your visited places
+8. **Add Wishlist Items**: Use `--wishlist` flag to mark restaurants you want to try
+9. **Use Interactive Sessions**: Provide feedback to get progressively better recommendations
+10. **Import Apple Maps Guides**: Use the `add` command to easily import restaurant lists from other sources
 
 ## 🔍 How Recommendations Work
 
@@ -279,6 +344,7 @@ print(result)
 ```
 picky/
 ├── README.md                    # This file
+├── picky.py                    # Command line interface
 ├── api.py                      # Main API interface
 ├── main_system.py              # Core system orchestrator
 ├── models.py                   # Data models
